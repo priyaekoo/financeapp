@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import DashboardWrapper from "@/components/DashboardWrapper";
@@ -12,10 +13,12 @@ export default function RelatoriosPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/login"); return; }
       const { data } = await supabase.from("transactions").select("*").eq("user_id", user?.id).order("date", { ascending: false });
       setTransactions(data || []);
       setLoading(false);

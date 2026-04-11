@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Plus, Check, X, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import DashboardWrapper from "@/components/DashboardWrapper";
@@ -25,9 +26,11 @@ export default function ContasPage() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const supabase = createClient();
+  const router = useRouter();
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { router.replace("/login"); return; }
     const [billRes, payRes] = await Promise.all([
       supabase.from("bills").select("*").eq("user_id", user?.id).eq("active", true).order("due_day"),
       supabase.from("bill_payments").select("*").eq("user_id", user?.id).eq("month", month).eq("year", year),

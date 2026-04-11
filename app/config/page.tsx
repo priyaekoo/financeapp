@@ -35,6 +35,7 @@ export default function ConfigPage() {
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/login"); return; }
       setUser(user);
       const { data } = await supabase.from("goals").select("*").eq("user_id", user?.id).order("created_at");
       setGoals(data || []);

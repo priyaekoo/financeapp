@@ -1,5 +1,5 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ArrowLeft } from "lucide-react";
@@ -20,6 +20,12 @@ function AddForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const supabase = createClient();
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) router.replace("/login");
+    });
+  }, []);
 
   async function handleSave() {
     if (!description || !amount || !category) { setError("Preencha todos os campos."); return; }

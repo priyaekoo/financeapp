@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ChevronRight, TrendingUp, TrendingDown, Bell } from "lucide-react";
 import Link from "next/link";
@@ -31,10 +32,12 @@ export default function HomePage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/login"); return; }
       setUser(user);
       const now = new Date();
       const [txRes, billRes, payRes] = await Promise.all([
