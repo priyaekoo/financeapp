@@ -20,7 +20,10 @@ export default function LoginPage() {
       if (isRegister) {
         const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
         if (error) throw error;
-        setError("Verifique seu email para confirmar o cadastro!");
+        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+        if (loginError) throw loginError;
+        router.push("/");
+        router.refresh();
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
