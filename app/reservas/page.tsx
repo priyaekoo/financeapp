@@ -9,6 +9,14 @@ import DashboardWrapper from "@/components/DashboardWrapper";
 type Goal = { id: string; name: string; icon: string; target_amount: number; saved_amount: number; color: string; };
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
+function maskBRL(v: string) {
+  const digits = v.replace(/\D/g, "");
+  if (!digits) return "";
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseInt(digits) / 100);
+}
+function parseBRL(v: string) {
+  return parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
+}
 const ICONS = ["✈️","📱","🏠","🚗","🎓","💍","🎮","🏖️","💪","🎯","🛒","👶"];
 const COLORS = [
   { label:"Verde", value:"#00C896" },
@@ -49,7 +57,7 @@ export default function ReservasPage() {
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.from("goals").insert({
       user_id: user?.id, name, icon,
-      target_amount: parseFloat(target.replace(",",".")),
+      target_amount: parseBRL(target),
       saved_amount: 0, color,
     }).select().single();
     if (!error && data) {
@@ -62,7 +70,7 @@ export default function ReservasPage() {
   async function deposit(goal: Goal) {
     if (!depositAmt) return;
     setSaving(true);
-    const newSaved = Math.min(goal.saved_amount + parseFloat(depositAmt.replace(",",".")), goal.target_amount);
+    const newSaved = Math.min(goal.saved_amount + parseBRL(depositAmt), goal.target_amount);
     await supabase.from("goals").update({ saved_amount: newSaved }).eq("id", goal.id);
     setGoals(prev => prev.map(g => g.id===goal.id ? { ...g, saved_amount: newSaved } : g));
     setDepositGoal(null); setDepositAmt(""); setSaving(false);
@@ -119,7 +127,7 @@ export default function ReservasPage() {
                 </div>
               </div>
               <input className="input-field" placeholder="Nome (ex: Viagem, Celular)" value={name} onChange={e => setName(e.target.value)}/>
-              <input className="input-field" type="number" inputMode="decimal" placeholder="Valor alvo (R$)" value={target} onChange={e => setTarget(e.target.value)}/>
+              <input className="input-field" type="text" inputMode="numeric" placeholder="0,00" value={target} onChange={e => setTarget(maskBRL(e.target.value))}/>
               <div>
                 <p className="text-gray-400 text-xs mb-2">Cor</p>
                 <div className="flex gap-2">
@@ -142,8 +150,8 @@ export default function ReservasPage() {
             <div className="card space-y-3 border-brand-green/30">
               <p className="text-white font-semibold text-sm">Depositar em: {depositGoal.name}</p>
               <p className="text-gray-400 text-xs">Aplicado: {fmt(depositGoal.saved_amount)} / Meta: {fmt(depositGoal.target_amount)}</p>
-              <input className="input-field" type="number" inputMode="decimal" placeholder="Valor a depositar (R$)"
-                value={depositAmt} onChange={e => setDepositAmt(e.target.value)}/>
+              <input className="input-field" type="text" inputMode="numeric" placeholder="0,00"
+                value={depositAmt} onChange={e => setDepositAmt(maskBRL(e.target.value))}/>
               <div className="flex gap-2">
                 <button className="btn-secondary flex-1 text-sm" onClick={() => { setDepositGoal(null); setDepositAmt(""); }}>Cancelar</button>
                 <button className="btn-primary flex-1 text-sm" onClick={() => deposit(depositGoal)} disabled={saving}>{saving?"...":"Depositar"}</button>

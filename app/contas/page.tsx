@@ -9,6 +9,14 @@ type Bill = { id: string; name: string; amount: number; due_day: number; icon: s
 type Payment = { id: string; bill_id: string; paid: boolean; month: number; year: number; paid_at: string | null; transaction_id: string | null; };
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
+function maskBRL(v: string) {
+  const digits = v.replace(/\D/g, "");
+  if (!digits) return "";
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseInt(digits) / 100);
+}
+function parseBRL(v: string) {
+  return parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
+}
 const ICONS = ["💡","📶","🏠","💧","📺","🚗","📱","🎓","💪","🛒","🐶","❤️"];
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
@@ -47,9 +55,10 @@ export default function ContasPage() {
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.from("bills").insert({
-      user_id: user?.id, name, amount: parseFloat(amount.replace(",",".")),
+      user_id: user?.id, name, amount: parseBRL(amount),
       due_day: parseInt(dueDay), icon, active: true,
     }).select().single();
+
     if (!error && data) {
       setBills(prev => [...prev, data].sort((a,b) => a.due_day - b.due_day));
       setName(""); setAmount(""); setDueDay("10"); setIcon("💡"); setShowForm(false);
@@ -209,7 +218,7 @@ export default function ContasPage() {
                 </div>
               </div>
               <input className="input-field" placeholder="Nome (ex: Aluguel, Internet)" value={name} onChange={e => setName(e.target.value)}/>
-              <input className="input-field" type="number" inputMode="decimal" placeholder="Valor (R$)" value={amount} onChange={e => setAmount(e.target.value)}/>
+              <input className="input-field" type="text" inputMode="numeric" placeholder="0,00" value={amount} onChange={e => setAmount(maskBRL(e.target.value))}/>
               <div>
                 <p className="text-gray-400 text-xs mb-1 ml-1">Dia do vencimento</p>
                 <input className="input-field" type="number" min="1" max="31" placeholder="Dia (1-31)" value={dueDay} onChange={e => setDueDay(e.target.value)}/>

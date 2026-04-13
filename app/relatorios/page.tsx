@@ -3,15 +3,19 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import DashboardWrapper from "@/components/DashboardWrapper";
 
 type Transaction = { id: string; type: "income"|"expense"; category: string; description: string; amount: number; date: string; };
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
 const MONTHS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
 export default function RelatoriosPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const supabase = createClient();
   const router = useRouter();
 
@@ -26,22 +30,47 @@ export default function RelatoriosPage() {
     load();
   }, []);
 
+  async function deleteTransaction(id: string) {
+    await supabase.from("bill_payments").update({ paid: false, paid_at: null, transaction_id: null }).eq("transaction_id", id);
+    await supabase.from("transactions").delete().eq("id", id);
+    setTransactions(prev => prev.filter(t => t.id !== id));
+  }
+
+  function prevMonth() {
+    if (filterMonth === 1) { setFilterMonth(12); setFilterYear(y => y - 1); }
+    else setFilterMonth(m => m - 1);
+  }
+  function nextMonth() {
+    const now = new Date();
+    if (filterYear > now.getFullYear() || (filterYear === now.getFullYear() && filterMonth >= now.getMonth() + 1)) return;
+    if (filterMonth === 12) { setFilterMonth(1); setFilterYear(y => y + 1); }
+    else setFilterMonth(m => m + 1);
+  }
+
+  const isCurrentMonth = filterMonth === new Date().getMonth() + 1 && filterYear === new Date().getFullYear();
+
+  const filtered = transactions.filter(t => {
+    const d = new Date(t.date + "T00:00:00");
+    return d.getMonth() + 1 === filterMonth && d.getFullYear() === filterYear;
+  });
+
+  const totalInc = filtered.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalExp = filtered.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+
+  const byCategory = filtered.filter(t => t.type === "expense").reduce((acc, tx) => {
+    acc[tx.category] = (acc[tx.category] || 0) + tx.amount; return acc;
+  }, {} as Record<string, number>);
+  const catData = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
   const byMonth = transactions.reduce((acc, tx) => {
-    const m = MONTHS[new Date(tx.date + "T00:00:00").getMonth()];
-    if (!acc[m]) acc[m] = { month: m, income: 0, expense: 0 };
-    tx.type==="income" ? (acc[m].income += tx.amount) : (acc[m].expense += tx.amount);
+    const d = new Date(tx.date + "T00:00:00");
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const label = MONTHS[d.getMonth()];
+    if (!acc[key]) acc[key] = { month: label, income: 0, expense: 0, order: d.getFullYear() * 100 + d.getMonth() };
+    tx.type === "income" ? (acc[key].income += tx.amount) : (acc[key].expense += tx.amount);
     return acc;
   }, {} as Record<string, any>);
-
-  const chartData = Object.values(byMonth).slice(-6);
-
-  const byCategory = transactions.filter(t => t.type==="expense").reduce((acc, tx) => {
-    acc[tx.category] = (acc[tx.category]||0) + tx.amount; return acc;
-  }, {} as Record<string, number>);
-
-  const catData = Object.entries(byCategory).sort((a,b) => b[1]-a[1]).slice(0,5);
-  const totalExp = transactions.filter(t => t.type==="expense").reduce((s,t) => s+t.amount, 0);
-  const totalInc = transactions.filter(t => t.type==="income").reduce((s,t) => s+t.amount, 0);
+  const chartData = Object.values(byMonth).sort((a, b) => a.order - b.order).slice(-6);
 
   return (
     <DashboardWrapper>
@@ -51,11 +80,7 @@ export default function RelatoriosPage() {
         <div className="space-y-5">
           <h1 className="text-xl font-bold">Relatórios</h1>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="card"><p className="text-gray-400 text-xs mb-1">Total entradas</p><p className="text-brand-green font-bold">{fmt(totalInc)}</p></div>
-            <div className="card"><p className="text-gray-400 text-xs mb-1">Total saídas</p><p className="text-brand-orange font-bold">{fmt(totalExp)}</p></div>
-          </div>
-
+          {/* Gráfico 6 meses — sempre visão geral */}
           <div className="card">
             <p className="text-gray-400 text-xs mb-4 font-semibold">Entradas vs Saídas (últimos 6 meses)</p>
             {chartData.length === 0 ? (
@@ -73,11 +98,35 @@ export default function RelatoriosPage() {
             )}
           </div>
 
+          {/* Filtro por mês */}
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-white text-sm">Detalhes do mês</h2>
+            <div className="flex items-center gap-2">
+              <button onClick={prevMonth} className="w-8 h-8 bg-brand-muted rounded-lg flex items-center justify-center">
+                <ChevronLeft size={16} className="text-gray-400"/>
+              </button>
+              <span className="text-white font-semibold text-sm min-w-[110px] text-center">
+                {MONTHS_PT[filterMonth-1].slice(0,3)} {filterYear}
+              </span>
+              <button onClick={nextMonth} disabled={isCurrentMonth}
+                className="w-8 h-8 bg-brand-muted rounded-lg flex items-center justify-center disabled:opacity-30">
+                <ChevronRight size={16} className="text-gray-400"/>
+              </button>
+            </div>
+          </div>
+
+          {/* Totais do mês filtrado */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="card"><p className="text-gray-400 text-xs mb-1">Entradas</p><p className="text-brand-green font-bold">{fmt(totalInc)}</p></div>
+            <div className="card"><p className="text-gray-400 text-xs mb-1">Saídas</p><p className="text-brand-orange font-bold">{fmt(totalExp)}</p></div>
+          </div>
+
+          {/* Categorias do mês */}
           {catData.length > 0 && (
             <div className="card space-y-3">
               <p className="text-gray-400 text-xs font-semibold">Maiores gastos por categoria</p>
               {catData.map(([cat, val]) => {
-                const pct = totalExp > 0 ? (val/totalExp)*100 : 0;
+                const pct = totalExp > 0 ? (val / totalExp) * 100 : 0;
                 return (
                   <div key={cat}>
                     <div className="flex justify-between text-xs mb-1">
@@ -93,12 +142,13 @@ export default function RelatoriosPage() {
             </div>
           )}
 
+          {/* Lista de transações do mês */}
           <div className="space-y-2">
-            <h2 className="font-bold text-white text-sm">Todas as transações</h2>
-            {transactions.length === 0 ? (
-              <div className="card text-center py-8"><p className="text-gray-500 text-sm">Nenhuma transação ainda.</p></div>
+            <h2 className="font-bold text-white text-sm">Transações</h2>
+            {filtered.length === 0 ? (
+              <div className="card text-center py-8"><p className="text-gray-500 text-sm">Nenhuma transação neste mês.</p></div>
             ) : (
-              transactions.map(tx => (
+              filtered.map(tx => (
                 <div key={tx.id} className="card flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-white text-sm truncate">{tx.description}</p>
@@ -107,6 +157,10 @@ export default function RelatoriosPage() {
                   <p className={`font-bold text-sm shrink-0 ${tx.type==="income"?"text-brand-green":"text-brand-orange"}`}>
                     {tx.type==="income"?"+":"-"}{fmt(tx.amount)}
                   </p>
+                  <button onClick={() => deleteTransaction(tx.id)}
+                    className="w-8 h-8 bg-red-500/10 rounded-lg flex items-center justify-center shrink-0">
+                    <Trash2 size={13} className="text-red-400"/>
+                  </button>
                 </div>
               ))
             )}

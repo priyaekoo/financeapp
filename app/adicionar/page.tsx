@@ -9,6 +9,15 @@ import DashboardWrapper from "@/components/DashboardWrapper";
 const incomeCategories = ["Trabalho","Freelance","Investimento","Outros"];
 const expenseCategories = ["Alimentação","Transporte","Saúde","Lazer","Educação","Moradia","Roupas","Outros"];
 
+function maskBRL(v: string) {
+  const digits = v.replace(/\D/g, "");
+  if (!digits) return "";
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseInt(digits) / 100);
+}
+function parseBRL(v: string) {
+  return parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
+}
+
 function AddForm() {
   const params = useSearchParams();
   const router = useRouter();
@@ -33,7 +42,7 @@ function AddForm() {
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from("transactions").insert({
       user_id: user?.id, type, description, category,
-      amount: parseFloat(amount.replace(",",".")), date,
+      amount: parseBRL(amount), date,
     });
     if (error) { setError(error.message); setLoading(false); return; }
     router.push("/");
@@ -63,9 +72,9 @@ function AddForm() {
           <p className="text-gray-400 text-xs mb-2">Valor</p>
           <div className="flex items-center justify-center gap-2">
             <span className="text-gray-400 text-xl font-bold">R$</span>
-            <input type="number" inputMode="decimal" placeholder="0,00"
+            <input type="text" inputMode="numeric" placeholder="0,00"
               className="text-4xl font-bold bg-transparent text-white text-center w-44 focus:outline-none placeholder-gray-600"
-              value={amount} onChange={e => setAmount(e.target.value)} />
+              value={amount} onChange={e => setAmount(maskBRL(e.target.value))} />
           </div>
         </div>
 
