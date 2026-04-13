@@ -1,14 +1,14 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, BarChart2, PlusCircle, CreditCard, Settings } from "lucide-react";
+import { Home, BarChart2, PlusCircle, CreditCard, Target } from "lucide-react";
 
 const tabs = [
   { href: "/", icon: Home, label: "Início" },
   { href: "/relatorios", icon: BarChart2, label: "Relatórios" },
   { href: "/adicionar", icon: PlusCircle, label: "Adicionar", isAdd: true },
   { href: "/contas", icon: CreditCard, label: "Contas" },
-  { href: "/config", icon: Settings, label: "Config" },
+  { href: "/reservas", icon: Target, label: "Reservas" },
 ];
 
 export default function BottomNav() {

@@ -18,12 +18,13 @@ export default function LoginPage() {
     setError("");
     try {
       if (isRegister) {
-        const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
-        if (error) throw error;
+        const { error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
+        if (signUpError) throw signUpError;
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
         router.push("/");
         router.refresh();
+        return;
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;

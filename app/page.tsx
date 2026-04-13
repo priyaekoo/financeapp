@@ -12,7 +12,7 @@ type Payment = { bill_id: string; paid: boolean; month: number; year: number; };
 
 const emoji: Record<string, string> = {
   Trabalho:"💼", Freelance:"💻", Investimento:"📈", Alimentação:"🍔",
-  Transporte:"🚗", Saúde:"💊", Lazer:"🎮", Educação:"📚", Moradia:"🏠", Roupas:"👕", Outros:"💰",
+  Transporte:"🚗", Saúde:"💊", Lazer:"🎮", Educação:"📚", Moradia:"🏠", Roupas:"👕", Outros:"💰", Contas:"🧾",
 };
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
@@ -41,7 +41,7 @@ export default function HomePage() {
       setUser(user);
       const now = new Date();
       const [txRes, billRes, payRes] = await Promise.all([
-        supabase.from("transactions").select("*").eq("user_id", user?.id).order("date", { ascending: false }).limit(5),
+        supabase.from("transactions").select("*").eq("user_id", user?.id).order("date", { ascending: false }),
         supabase.from("bills").select("*").eq("user_id", user?.id).eq("active", true),
         supabase.from("bill_payments").select("*").eq("user_id", user?.id).eq("month", now.getMonth()+1).eq("year", now.getFullYear()),
       ]);
@@ -129,7 +129,7 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {transactions.map(tx => (
+                {transactions.slice(0, 5).map(tx => (
                   <div key={tx.id} className="card flex items-center gap-3">
                     <div className="w-10 h-10 bg-brand-muted rounded-xl flex items-center justify-center text-lg shrink-0">{emoji[tx.category]||"💳"}</div>
                     <div className="flex-1 min-w-0">

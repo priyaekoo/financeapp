@@ -6,7 +6,7 @@ import { Plus, Check, X, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
 import DashboardWrapper from "@/components/DashboardWrapper";
 
 type Bill = { id: string; name: string; amount: number; due_day: number; icon: string; active: boolean; };
-type Payment = { id: string; bill_id: string; paid: boolean; month: number; year: number; paid_at: string | null; };
+type Payment = { id: string; bill_id: string; paid: boolean; month: number; year: number; paid_at: string | null; transaction_id: string | null; };
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
 const ICONS = ["💡","📶","🏠","💧","📺","🚗","📱","🎓","💪","🛒","🐶","❤️"];
@@ -60,13 +60,37 @@ export default function ContasPage() {
   async function togglePayment(bill: Bill) {
     const { data: { user } } = await supabase.auth.getUser();
     const existing = payments.find(p => p.bill_id === bill.id);
+    const today = new Date().toISOString().split("T")[0];
+
     if (existing) {
-      await supabase.from("bill_payments").update({ paid: !existing.paid, paid_at: !existing.paid ? new Date().toISOString() : null })
-        .eq("id", existing.id);
-      setPayments(prev => prev.map(p => p.id===existing.id ? { ...p, paid: !p.paid, paid_at: !p.paid ? new Date().toISOString() : null } : p));
+      const nowPaid = !existing.paid;
+      if (nowPaid) {
+        const { data: tx } = await supabase.from("transactions").insert({
+          user_id: user?.id, type: "expense", category: "Contas",
+          description: bill.name, amount: bill.amount, date: today,
+        }).select().single();
+        await supabase.from("bill_payments").update({
+          paid: true, paid_at: new Date().toISOString(), transaction_id: tx?.id ?? null,
+        }).eq("id", existing.id);
+        setPayments(prev => prev.map(p => p.id===existing.id ? { ...p, paid: true, paid_at: new Date().toISOString(), transaction_id: tx?.id ?? null } : p));
+      } else {
+        if (existing.transaction_id) {
+          await supabase.from("transactions").delete().eq("id", existing.transaction_id);
+        }
+        await supabase.from("bill_payments").update({
+          paid: false, paid_at: null, transaction_id: null,
+        }).eq("id", existing.id);
+        setPayments(prev => prev.map(p => p.id===existing.id ? { ...p, paid: false, paid_at: null, transaction_id: null } : p));
+      }
     } else {
+      const { data: tx } = await supabase.from("transactions").insert({
+        user_id: user?.id, type: "expense", category: "Contas",
+        description: bill.name, amount: bill.amount, date: today,
+      }).select().single();
       const { data } = await supabase.from("bill_payments").insert({
-        bill_id: bill.id, user_id: user?.id, month, year, paid: true, paid_at: new Date().toISOString(), amount_paid: bill.amount,
+        bill_id: bill.id, user_id: user?.id, month, year,
+        paid: true, paid_at: new Date().toISOString(), amount_paid: bill.amount,
+        transaction_id: tx?.id ?? null,
       }).select().single();
       if (data) setPayments(prev => [...prev, data]);
     }
