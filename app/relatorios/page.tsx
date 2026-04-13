@@ -10,6 +10,10 @@ type Transaction = { id: string; type: "income"|"expense"; category: string; des
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
 const MONTHS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const CAT_EMOJI: Record<string, string> = {
+  Alimentação:"🍔", Transporte:"🚗", Saúde:"💊", Lazer:"🎮", Educação:"📚",
+  Moradia:"🏠", Roupas:"👕", Outros:"💰", Contas:"🧾", Trabalho:"💼", Freelance:"💻", Investimento:"📈",
+};
 
 export default function RelatoriosPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -124,17 +128,23 @@ export default function RelatoriosPage() {
           {/* Categorias do mês */}
           {catData.length > 0 && (
             <div className="card space-y-3">
-              <p className="text-gray-400 text-xs font-semibold">Maiores gastos por categoria</p>
-              {catData.map(([cat, val]) => {
+              <p className="text-white font-bold text-sm">No que mais gastou</p>
+              {catData.map(([cat, val], i) => {
                 const pct = totalExp > 0 ? (val / totalExp) * 100 : 0;
                 return (
-                  <div key={cat}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-white font-medium">{cat}</span>
-                      <span className="text-gray-400">{fmt(val)}</span>
+                  <div key={cat} className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-brand-muted rounded-xl flex items-center justify-center text-base shrink-0">
+                      {CAT_EMOJI[cat] || "💳"}
                     </div>
-                    <div className="h-2 bg-brand-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-brand-orange rounded-full" style={{ width:`${pct}%` }}/>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-white font-medium">{cat}</span>
+                        <span className="text-brand-orange font-semibold">{fmt(val)}</span>
+                      </div>
+                      <div className="h-1.5 bg-brand-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-brand-orange rounded-full transition-all duration-500" style={{ width:`${pct}%` }}/>
+                      </div>
+                      <p className="text-gray-600 text-[10px] mt-0.5">{Math.round(pct)}% das saídas</p>
                     </div>
                   </div>
                 );

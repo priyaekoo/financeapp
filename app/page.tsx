@@ -61,6 +61,18 @@ export default function HomePage() {
   const unpaidBills = bills.filter(b => !payments.find(p => p.bill_id===b.id && p.paid));
   const totalUnpaid = unpaidBills.reduce((s,b) => s+b.amount, 0);
 
+  const now = new Date();
+  const monthTx = transactions.filter(t => {
+    const d = new Date(t.date + "T00:00:00");
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const monthIncome = monthTx.filter(t => t.type==="income").reduce((s,t) => s+t.amount, 0);
+  const monthExpense = monthTx.filter(t => t.type==="expense").reduce((s,t) => s+t.amount, 0);
+  const monthResult = monthIncome - monthExpense;
+  const expPct = monthIncome > 0 ? Math.min((monthExpense / monthIncome) * 100, 100) : monthExpense > 0 ? 100 : 0;
+  const isGreen = monthResult >= 0;
+  const monthName = now.toLocaleDateString("pt-BR", { month: "long" });
+
   return (
     <DashboardWrapper>
       {loading ? (
@@ -103,6 +115,36 @@ export default function HomePage() {
             <div className="card"><p className="text-gray-400 text-xs mb-1">Entradas</p><p className="text-brand-green font-bold text-base">{fmt(income)}</p></div>
             <div className="card"><p className="text-gray-400 text-xs mb-1">Saídas</p><p className="text-brand-orange font-bold text-base">{fmt(expense)}</p></div>
           </div>
+
+          {/* Saúde financeira do mês */}
+          {(monthIncome > 0 || monthExpense > 0) && (
+            <div className={`card border ${isGreen ? "border-brand-green/30" : "border-red-500/30"}`}>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-white font-bold text-sm">Saúde de {monthName}</p>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${isGreen ? "bg-brand-green/10 text-brand-green" : "bg-red-500/10 text-red-400"}`}>
+                  {isGreen ? "● No verde" : "● No vermelho"}
+                </span>
+              </div>
+              <p className={`text-2xl font-bold mb-3 ${isGreen ? "text-brand-green" : "text-red-400"}`}>
+                {isGreen ? "+" : ""}{fmt(monthResult)}
+              </p>
+              {monthIncome > 0 && (
+                <>
+                  <div className="h-2 bg-brand-muted rounded-full overflow-hidden mb-1.5">
+                    <div className={`h-full rounded-full transition-all duration-500 ${expPct >= 100 ? "bg-red-500" : expPct >= 80 ? "bg-brand-orange" : "bg-brand-green"}`}
+                      style={{ width:`${expPct}%` }}/>
+                  </div>
+                  <p className="text-gray-500 text-xs mb-3">
+                    {isGreen ? `${Math.round(100 - expPct)}% da renda guardada` : `Gastou ${fmt(monthExpense - monthIncome)} acima da renda`}
+                  </p>
+                </>
+              )}
+              <div className="flex justify-between text-xs pt-2 border-t border-brand-border">
+                <span className="text-gray-500">Entradas <span className="text-brand-green font-semibold">{fmt(monthIncome)}</span></span>
+                <span className="text-gray-500">Saídas <span className="text-brand-orange font-semibold">{fmt(monthExpense)}</span></span>
+              </div>
+            </div>
+          )}
 
           {/* Alerta de contas pendentes */}
           {unpaidBills.length > 0 && (
