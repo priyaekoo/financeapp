@@ -2,11 +2,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, Check, X, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Check, X, Trash2, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import DashboardWrapper from "@/components/DashboardWrapper";
 
 type Bill = { id: string; name: string; amount: number; due_day: number; icon: string; active: boolean; };
 type Payment = { id: string; bill_id: string; paid: boolean; month: number; year: number; paid_at: string | null; transaction_id: string | null; };
+type BillWithStatus = Bill & { isPaid: boolean; isOverdue: boolean; isToday: boolean; payment: Payment | undefined; };
+type ConfirmState = { bill: BillWithStatus; action: "pay" | "unpay" | "delete" } | null;
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
 function maskBRL(v: string) {
@@ -33,6 +35,7 @@ export default function ContasPage() {
   const [filter, setFilter] = useState<"all"|"pending"|"paid">("all");
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
+  const [confirm, setConfirm] = useState<ConfirmState>(null);
   const supabase = createClient();
   const router = useRouter();
 
@@ -58,7 +61,6 @@ export default function ContasPage() {
       user_id: user?.id, name, amount: parseBRL(amount),
       due_day: parseInt(dueDay), icon, active: true,
     }).select().single();
-
     if (!error && data) {
       setBills(prev => [...prev, data].sort((a,b) => a.due_day - b.due_day));
       setName(""); setAmount(""); setDueDay("10"); setIcon("💡"); setShowForm(false);
@@ -66,7 +68,7 @@ export default function ContasPage() {
     setSaving(false);
   }
 
-  async function togglePayment(bill: Bill) {
+  async function togglePayment(bill: BillWithStatus) {
     const { data: { user } } = await supabase.auth.getUser();
     const existing = payments.find(p => p.bill_id === bill.id);
     const today = new Date().toISOString().split("T")[0];
@@ -110,6 +112,58 @@ export default function ContasPage() {
     setBills(prev => prev.filter(b => b.id !== id));
   }
 
+  async function handleConfirm() {
+    if (!confirm) return;
+    setSaving(true);
+    if (confirm.action === "delete") {
+      await deleteBill(confirm.bill.id);
+    } else {
+      await togglePayment(confirm.bill);
+    }
+    setSaving(false);
+    setConfirm(null);
+  }
+
+  function getConfirmContent() {
+    if (!confirm) return null;
+    const { bill, action } = confirm;
+    if (action === "delete") return {
+      icon: "🗑️",
+      title: `Remover "${bill.name}"?`,
+      desc: "A conta fixa será removida e não aparecerá mais nos próximos meses.",
+      btnLabel: "Remover conta",
+      danger: true,
+    };
+    if (action === "unpay") return {
+      icon: "↩️",
+      title: "Desmarcar pagamento?",
+      desc: `O valor de ${fmt(bill.amount)} será removido das saídas do mês.`,
+      btnLabel: "Desmarcar",
+      danger: false,
+    };
+    if (bill.isOverdue) return {
+      icon: "⚠️",
+      title: "Conta vencida",
+      desc: `Esta conta venceu no dia ${bill.due_day}. Deseja registrar o pagamento assim mesmo? O valor de ${fmt(bill.amount)} será lançado como saída.`,
+      btnLabel: "Marcar como paga",
+      danger: false,
+    };
+    if (bill.isToday) return {
+      icon: "📅",
+      title: "Vence hoje!",
+      desc: `Confirmar o pagamento de "${bill.name}"? O valor de ${fmt(bill.amount)} será registrado como saída.`,
+      btnLabel: "Confirmar pagamento",
+      danger: false,
+    };
+    return {
+      icon: "✅",
+      title: "Confirmar pagamento",
+      desc: `Marcar "${bill.name}" como paga? O valor de ${fmt(bill.amount)} será registrado como saída.`,
+      btnLabel: "Confirmar",
+      danger: false,
+    };
+  }
+
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1);
   }
@@ -122,11 +176,12 @@ export default function ContasPage() {
   const isCurrentMonth = month === new Date().getMonth()+1 && year === new Date().getFullYear();
   const today = new Date().getDate();
 
-  const billsWithStatus = bills.map(b => {
+  const billsWithStatus: BillWithStatus[] = bills.map(b => {
     const payment = payments.find(p => p.bill_id === b.id);
     const isPaid = payment?.paid || false;
     const isOverdue = !isPaid && isCurrentMonth && today > b.due_day;
-    return { ...b, isPaid, isOverdue, payment };
+    const isToday = !isPaid && isCurrentMonth && today === b.due_day;
+    return { ...b, isPaid, isOverdue, isToday, payment };
   });
 
   const filtered = billsWithStatus.filter(b => {
@@ -140,6 +195,7 @@ export default function ContasPage() {
   const totalPending = totalBills - totalPaid;
   const paidCount = billsWithStatus.filter(b => b.isPaid).length;
   const pct = bills.length > 0 ? Math.round((paidCount / bills.length) * 100) : 0;
+  const confirmContent = getConfirmContent();
 
   return (
     <DashboardWrapper>
@@ -147,7 +203,7 @@ export default function ContasPage() {
         <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-brand-green border-t-transparent rounded-full animate-spin"/></div>
       ) : (
         <div className="space-y-4">
-          {/* Header com navegação de mês */}
+          {/* Header */}
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold">Contas</h1>
             <div className="flex items-center gap-2">
@@ -239,30 +295,60 @@ export default function ContasPage() {
           ) : (
             <div className="space-y-2">
               {filtered.map(bill => (
-                <div key={bill.id} className={`card flex items-center gap-3 transition-all ${bill.isOverdue?"border-red-500/30 bg-red-500/5":""} ${bill.isPaid?"opacity-70":""}`}>
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${bill.isPaid?"bg-brand-green/10":bill.isOverdue?"bg-red-500/10":"bg-brand-muted"}`}>
+                <div key={bill.id} className={`card flex items-center gap-3 transition-all ${bill.isOverdue?"border-red-500/30 bg-red-500/5":bill.isToday?"border-yellow-500/30 bg-yellow-500/5":""} ${bill.isPaid?"opacity-70":""}`}>
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${bill.isPaid?"bg-brand-green/10":bill.isOverdue?"bg-red-500/10":bill.isToday?"bg-yellow-500/10":"bg-brand-muted"}`}>
                     {bill.icon}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={`font-semibold text-sm ${bill.isPaid?"line-through text-gray-400":"text-white"}`}>{bill.name}</p>
-                    <p className={`text-xs ${bill.isPaid?"text-brand-green":bill.isOverdue?"text-red-400":"text-gray-400"}`}>
-                      {bill.isPaid ? `✓ Pago` : bill.isOverdue ? `Venceu dia ${bill.due_day}` : `Vence dia ${bill.due_day}`}
+                    <p className={`text-xs ${bill.isPaid?"text-brand-green":bill.isOverdue?"text-red-400":bill.isToday?"text-yellow-400":"text-gray-400"}`}>
+                      {bill.isPaid ? "✓ Pago" : bill.isOverdue ? `Venceu dia ${bill.due_day}` : bill.isToday ? "Vence hoje!" : `Vence dia ${bill.due_day}`}
                     </p>
                   </div>
-                  <p className={`font-bold text-sm shrink-0 ${bill.isPaid?"text-gray-400":bill.isOverdue?"text-red-400":"text-white"}`}>
+                  <p className={`font-bold text-sm shrink-0 ${bill.isPaid?"text-gray-400":bill.isOverdue?"text-red-400":bill.isToday?"text-yellow-400":"text-white"}`}>
                     {fmt(bill.amount)}
                   </p>
-                  <button onClick={() => togglePayment(bill)}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${bill.isPaid?"bg-brand-green/20":"bg-brand-muted border border-brand-border"}`}>
-                    {bill.isPaid ? <Check size={16} className="text-brand-green"/> : bill.isOverdue ? <X size={14} className="text-red-400"/> : <div className="w-3 h-3"/>}
+                  <button
+                    onClick={() => setConfirm({ bill, action: bill.isPaid ? "unpay" : "pay" })}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${bill.isPaid?"bg-brand-green/20":bill.isOverdue?"bg-red-500/10 border border-red-500/30":bill.isToday?"bg-yellow-500/10 border border-yellow-500/30":"bg-brand-muted border border-brand-border"}`}>
+                    {bill.isPaid ? <Check size={16} className="text-brand-green"/> : bill.isOverdue ? <AlertTriangle size={14} className="text-red-400"/> : bill.isToday ? <AlertTriangle size={14} className="text-yellow-400"/> : <div className="w-3 h-3 rounded-full border-2 border-gray-600"/>}
                   </button>
-                  <button onClick={() => deleteBill(bill.id)} className="w-8 h-8 bg-red-500/10 rounded-lg flex items-center justify-center">
+                  <button onClick={() => setConfirm({ bill, action: "delete" })} className="w-8 h-8 bg-red-500/10 rounded-lg flex items-center justify-center">
                     <Trash2 size={13} className="text-red-400"/>
                   </button>
                 </div>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal de confirmação */}
+      {confirm && confirmContent && (
+        <div className="fixed inset-0 z-50 flex items-end" onClick={() => setConfirm(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"/>
+          <div className="relative w-full max-w-md mx-auto bg-[#111827] border-t border-brand-border rounded-t-3xl p-6 space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-brand-border rounded-full mx-auto"/>
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">{confirmContent.icon}</span>
+              <div>
+                <p className="text-white font-bold text-base">{confirmContent.title}</p>
+                <p className="text-gray-400 text-sm mt-1">{confirmContent.desc}</p>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button className="btn-secondary flex-1 text-sm" onClick={() => setConfirm(null)}>
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={saving}
+                className={`flex-1 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 ${confirmContent.danger ? "bg-red-500 text-white" : "btn-primary"}`}>
+                {saving ? "..." : confirmContent.btnLabel}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </DashboardWrapper>
