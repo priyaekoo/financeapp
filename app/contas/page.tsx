@@ -325,27 +325,29 @@ export default function ContasPage() {
 
       {/* Modal de confirmação */}
       {confirm && confirmContent && (
-        <div className="fixed inset-0 z-50 flex items-end" onClick={() => setConfirm(null)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"/>
-          <div className="relative w-full max-w-md mx-auto bg-[#111827] border-t border-brand-border rounded-t-3xl p-6 space-y-4"
+        <div className="fixed inset-0 z-[100] flex items-end" onClick={() => setConfirm(null)}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"/>
+          <div className="relative w-full max-w-md mx-auto bg-[#111827] border-t border-brand-border rounded-t-3xl px-6 pt-5 pb-10 space-y-4"
             onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 bg-brand-border rounded-full mx-auto"/>
             <div className="flex items-start gap-3">
               <span className="text-2xl">{confirmContent.icon}</span>
               <div>
                 <p className="text-white font-bold text-base">{confirmContent.title}</p>
-                <p className="text-gray-400 text-sm mt-1">{confirmContent.desc}</p>
+                <p className="text-gray-400 text-sm mt-1 leading-relaxed">{confirmContent.desc}</p>
               </div>
             </div>
-            <div className="flex gap-3 pt-1">
-              <button className="btn-secondary flex-1 text-sm" onClick={() => setConfirm(null)}>
+            <div className="flex gap-3 pt-2">
+              <button
+                className="flex-1 py-3.5 rounded-xl font-semibold text-sm bg-brand-muted text-gray-300 border border-brand-border active:scale-95 transition-all"
+                onClick={() => setConfirm(null)}>
                 Cancelar
               </button>
               <button
                 onClick={handleConfirm}
                 disabled={saving}
-                className={`flex-1 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 ${confirmContent.danger ? "bg-red-500 text-white" : "btn-primary"}`}>
-                {saving ? "..." : confirmContent.btnLabel}
+                className={`flex-1 py-3.5 rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50 ${confirmContent.danger ? "bg-red-500 text-white" : "bg-brand-green text-brand-dark"}`}>
+                {saving ? "Aguarde..." : confirmContent.btnLabel}
               </button>
             </div>
           </div>
