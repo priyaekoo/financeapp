@@ -9,8 +9,6 @@ import DashboardWrapper from "@/components/DashboardWrapper";
 const incomeCategories = ["Trabalho", "Freelance", "Investimento", "Outros"];
 const expenseCategories = [
   "Alimentação",
-  "Transporte",
-  "Saúde",
   "Lazer",
   "Educação",
   "Moradia",
@@ -18,6 +16,7 @@ const expenseCategories = [
   "Gasolina",
   "Consertos Automovéis",
   "Freelance",
+  "Cartão de Crédito",
   "Outros",
 ];
 
