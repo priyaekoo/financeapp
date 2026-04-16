@@ -16,6 +16,8 @@ const expenseCategories = [
   "Moradia",
   "Roupas",
   "Gasolina",
+  "Consertos Automovéis",
+  "Freelance",
   "Outros",
 ];
 
