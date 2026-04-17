@@ -6,7 +6,7 @@ import { Plus, Trash2, Target, Settings } from "lucide-react";
 import Link from "next/link";
 import DashboardWrapper from "@/components/DashboardWrapper";
 
-type Goal = { id: string; name: string; icon: string; target_amount: number; saved_amount: number; color: string; };
+type Goal = { id: string; name: string; icon: string; target_amount: number; saved_amount: number; color: string; goal_type?: string; };
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
 function maskBRL(v: string) {
@@ -17,7 +17,8 @@ function maskBRL(v: string) {
 function parseBRL(v: string) {
   return parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
 }
-const ICONS = ["✈️","📱","🏠","🚗","🎓","💍","🎮","🏖️","💪","🎯","🛒","👶"];
+
+const ICONS = ["✈️","📱","🏠","🚗","🎓","💍","🎮","🏖️","💪","🎯","🛒","👶","🤑"];
 const COLORS = [
   { label:"Verde", value:"#00C896" },
   { label:"Roxo", value:"#9D7FEA" },
@@ -40,6 +41,8 @@ export default function ReservasPage() {
   const router = useRouter();
   const supabase = createClient();
 
+  const isInvestmentIcon = icon === "🤑";
+
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -52,13 +55,18 @@ export default function ReservasPage() {
   }, []);
 
   async function addGoal() {
-    if (!name || !target) return;
+    if (!name) return;
+    if (!isInvestmentIcon && !target) return;
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.from("goals").insert({
-      user_id: user?.id, name, icon,
-      target_amount: parseBRL(target),
-      saved_amount: 0, color,
+      user_id: user?.id,
+      name,
+      icon,
+      target_amount: isInvestmentIcon ? 0 : parseBRL(target),
+      saved_amount: 0,
+      color,
+      goal_type: isInvestmentIcon ? "investment" : "goal",
     }).select().single();
     if (!error && data) {
       setGoals(prev => [...prev, data]);
@@ -70,7 +78,11 @@ export default function ReservasPage() {
   async function deposit(goal: Goal) {
     if (!depositAmt) return;
     setSaving(true);
-    const newSaved = Math.min(goal.saved_amount + parseBRL(depositAmt), goal.target_amount);
+    const isInvestment = goal.goal_type === "investment";
+    const added = parseBRL(depositAmt);
+    const newSaved = isInvestment
+      ? goal.saved_amount + added
+      : Math.min(goal.saved_amount + added, goal.target_amount);
     await supabase.from("goals").update({ saved_amount: newSaved }).eq("id", goal.id);
     setGoals(prev => prev.map(g => g.id===goal.id ? { ...g, saved_amount: newSaved } : g));
     setDepositGoal(null); setDepositAmt(""); setSaving(false);
@@ -81,7 +93,10 @@ export default function ReservasPage() {
     setGoals(prev => prev.filter(g => g.id !== id));
   }
 
-  const totalAplicado = goals.reduce((s,g) => s+g.saved_amount, 0);
+  const metas = goals.filter(g => g.goal_type !== "investment");
+  const investimentos = goals.filter(g => g.goal_type === "investment");
+  const totalMetas = metas.reduce((s,g) => s+g.saved_amount, 0);
+  const totalInvestimentos = investimentos.reduce((s,g) => s+g.saved_amount, 0);
 
   return (
     <DashboardWrapper>
@@ -102,12 +117,23 @@ export default function ReservasPage() {
             </div>
           </div>
 
-          {/* Resumo */}
+          {/* Resumo cards */}
           {goals.length > 0 && (
-            <div className="rounded-2xl p-4" style={{ background:"linear-gradient(135deg,#9D7FEA 0%,#7C5CE6 100%)" }}>
-              <p className="text-purple-200 text-xs font-medium mb-1">Total aplicado</p>
-              <p className="text-white text-3xl font-bold tracking-tight">{fmt(totalAplicado)}</p>
-              <p className="text-purple-200 text-xs mt-2">{goals.length} reserva{goals.length>1?"s":""} ativa{goals.length>1?"s":""}</p>
+            <div className="grid grid-cols-2 gap-3">
+              {metas.length > 0 && (
+                <div className="rounded-2xl p-4" style={{ background:"linear-gradient(135deg,#9D7FEA 0%,#7C5CE6 100%)" }}>
+                  <p className="text-purple-200 text-xs font-medium mb-1">🎯 Metas</p>
+                  <p className="text-white text-xl font-bold tracking-tight">{fmt(totalMetas)}</p>
+                  <p className="text-purple-200 text-xs mt-1">{metas.length} ativa{metas.length>1?"s":""}</p>
+                </div>
+              )}
+              {investimentos.length > 0 && (
+                <div className="rounded-2xl p-4" style={{ background:"linear-gradient(135deg,#F59E0B 0%,#D97706 100%)" }}>
+                  <p className="text-yellow-100 text-xs font-medium mb-1">🤑 Aplicações</p>
+                  <p className="text-white text-xl font-bold tracking-tight">{fmt(totalInvestimentos)}</p>
+                  <p className="text-yellow-100 text-xs mt-1">{investimentos.length} ativa{investimentos.length>1?"s":""}</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -116,18 +142,30 @@ export default function ReservasPage() {
             <div className="card space-y-3 border-brand-green/20">
               <p className="text-white font-semibold text-sm">Nova reserva</p>
               <div>
-                <p className="text-gray-400 text-xs mb-2">Ícone</p>
+                <p className="text-gray-400 text-xs mb-2">Ícone {isInvestmentIcon && <span className="text-yellow-400 font-semibold">— Modo Aplicação</span>}</p>
                 <div className="flex flex-wrap gap-2">
                   {ICONS.map(ic => (
                     <button key={ic} onClick={() => setIcon(ic)}
-                      className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center ${icon===ic?"bg-brand-green/20 border-2 border-brand-green":"bg-brand-muted"}`}>
+                      className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center transition-all ${icon===ic ? (ic==="🤑"?"bg-yellow-500/20 border-2 border-yellow-400":"bg-brand-green/20 border-2 border-brand-green") : "bg-brand-muted"}`}>
                       {ic}
                     </button>
                   ))}
                 </div>
               </div>
-              <input className="input-field" placeholder="Nome (ex: Viagem, Celular)" value={name} onChange={e => setName(e.target.value)}/>
-              <input className="input-field" type="text" inputMode="numeric" placeholder="0,00" value={target} onChange={e => setTarget(maskBRL(e.target.value))}/>
+
+              {isInvestmentIcon && (
+                <div className="rounded-xl p-3 bg-yellow-500/10 border border-yellow-500/20">
+                  <p className="text-yellow-300 text-xs font-semibold">🤑 Aplicação livre</p>
+                  <p className="text-gray-400 text-xs mt-0.5">Sem meta definida. O valor cresce conforme você depositar.</p>
+                </div>
+              )}
+
+              <input className="input-field" placeholder="Nome (ex: Viagem, Tesouro Direto)" value={name} onChange={e => setName(e.target.value)}/>
+
+              {!isInvestmentIcon && (
+                <input className="input-field" type="text" inputMode="numeric" placeholder="Meta: 0,00" value={target} onChange={e => setTarget(maskBRL(e.target.value))}/>
+              )}
+
               <div>
                 <p className="text-gray-400 text-xs mb-2">Cor</p>
                 <div className="flex gap-2">
@@ -148,27 +186,38 @@ export default function ReservasPage() {
           {/* Modal depósito */}
           {depositGoal && (
             <div className="card space-y-3 border-brand-green/30">
-              <p className="text-white font-semibold text-sm">Depositar em: {depositGoal.name}</p>
-              <p className="text-gray-400 text-xs">Aplicado: {fmt(depositGoal.saved_amount)} / Meta: {fmt(depositGoal.target_amount)}</p>
+              <p className="text-white font-semibold text-sm">
+                {depositGoal.goal_type === "investment" ? "🤑 Aplicar em:" : "Depositar em:"} {depositGoal.name}
+              </p>
+              {depositGoal.goal_type !== "investment" && (
+                <p className="text-gray-400 text-xs">Aplicado: {fmt(depositGoal.saved_amount)} / Meta: {fmt(depositGoal.target_amount)}</p>
+              )}
+              {depositGoal.goal_type === "investment" && (
+                <p className="text-gray-400 text-xs">Total aplicado: {fmt(depositGoal.saved_amount)}</p>
+              )}
               <input className="input-field" type="text" inputMode="numeric" placeholder="0,00"
                 value={depositAmt} onChange={e => setDepositAmt(maskBRL(e.target.value))}/>
               <div className="flex gap-2">
                 <button className="btn-secondary flex-1 text-sm" onClick={() => { setDepositGoal(null); setDepositAmt(""); }}>Cancelar</button>
-                <button className="btn-primary flex-1 text-sm" onClick={() => deposit(depositGoal)} disabled={saving}>{saving?"...":"Depositar"}</button>
+                <button className="btn-primary flex-1 text-sm" onClick={() => deposit(depositGoal)} disabled={saving}>{saving?"...":"Confirmar"}</button>
               </div>
             </div>
           )}
 
-          {/* Lista */}
-          {goals.length === 0 && !showForm ? (
+          {/* Lista vazia */}
+          {goals.length === 0 && !showForm && (
             <div className="card text-center py-10">
               <Target size={32} className="text-gray-600 mx-auto mb-3"/>
               <p className="text-gray-500 text-sm">Nenhuma reserva criada.</p>
               <button onClick={() => setShowForm(true)} className="text-brand-green text-sm mt-1 inline-block">Criar primeira reserva →</button>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {goals.map(goal => {
+          )}
+
+          {/* Seção: Metas */}
+          {metas.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide">🎯 Metas</p>
+              {metas.map(goal => {
                 const pct = goal.target_amount > 0 ? Math.min((goal.saved_amount / goal.target_amount) * 100, 100) : 0;
                 const done = pct >= 100;
                 return (
@@ -179,7 +228,7 @@ export default function ReservasPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-white font-semibold text-sm">{goal.name}</p>
-                        <p className="text-xs font-bold" style={{ color: goal.color }}>{Math.round(pct)}% {done?"✓ Concluído!":"aplicado"}</p>
+                        <p className="text-xs font-bold" style={{ color: goal.color }}>{Math.round(pct)}% {done?"✓ Concluído!":"da meta"}</p>
                       </div>
                       <button onClick={() => setDepositGoal(goal)}
                         className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-brand-border text-gray-400 active:scale-95 transition-all">
@@ -199,6 +248,33 @@ export default function ReservasPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Seção: Aplicações */}
+          {investimentos.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide">🤑 Aplicações</p>
+              {investimentos.map(goal => (
+                <div key={goal.id} className="card border-yellow-500/20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 bg-yellow-500/10">
+                      {goal.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-semibold text-sm">{goal.name}</p>
+                      <p className="text-yellow-400 text-xs font-bold">{fmt(goal.saved_amount)} aplicados</p>
+                    </div>
+                    <button onClick={() => setDepositGoal(goal)}
+                      className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-yellow-500/30 text-yellow-400 active:scale-95 transition-all">
+                      + Aplicar
+                    </button>
+                    <button onClick={() => deleteGoal(goal.id)} className="w-7 h-7 bg-red-500/10 rounded-lg flex items-center justify-center">
+                      <Trash2 size={12} className="text-red-400"/>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

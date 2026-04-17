@@ -1,7 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+
+const STORAGE_KEY = "financeapp_remember";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -10,8 +12,21 @@ export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [remember, setRemember] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const { email: e, password: p } = JSON.parse(saved);
+        if (e) setEmail(e);
+        if (p) setPassword(p);
+        setRemember(true);
+      }
+    } catch {}
+  }, []);
 
   async function handleSubmit() {
     setLoading(true);
@@ -22,15 +37,17 @@ export default function LoginPage() {
         if (signUpError) throw signUpError;
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
-        router.push("/");
-        router.refresh();
-        return;
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.push("/");
-        router.refresh();
       }
+      if (remember) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ email, password }));
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+      router.push("/");
+      router.refresh();
     } catch (e: any) {
       setError(e.message || "Algo deu errado. Tente novamente.");
     } finally {
@@ -55,6 +72,16 @@ export default function LoginPage() {
         )}
         <input className="input-field" placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <input className="input-field" placeholder="Senha" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+
+        {!isRegister && (
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <div onClick={() => setRemember(v => !v)}
+              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${remember ? "bg-brand-green border-brand-green" : "border-gray-600 bg-transparent"}`}>
+              {remember && <span className="text-brand-dark text-xs font-bold">✓</span>}
+            </div>
+            <span className="text-gray-400 text-sm">Lembrar email e senha</span>
+          </label>
+        )}
 
         {error && (
           <p className={`text-sm ${error.includes("Verifique") ? "text-brand-green" : "text-red-400"}`}>{error}</p>

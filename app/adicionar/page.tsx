@@ -8,25 +8,20 @@ import DashboardWrapper from "@/components/DashboardWrapper";
 
 const incomeCategories = ["Trabalho", "Freelance", "Investimento", "Outros"];
 const expenseCategories = [
-  "Alimentação",
-  "Lazer",
-  "Educação",
-  "Moradia",
-  "Roupas",
-  "Gasolina",
-  "Consertos Automovéis",
-  "Freelance",
-  "Cartão de Crédito",
-  "Outros",
+  "Alimentação", "Lazer", "Educação", "Moradia", "Roupas",
+  "Gasolina", "Consertos Automovéis", "Freelance", "Cartão de Crédito", "Outros",
 ];
+
+const CAT_EMOJI: Record<string, string> = {
+  Trabalho:"💼", Freelance:"💻", Investimento:"📈", Outros:"💰",
+  Alimentação:"🍔", Lazer:"🎮", Educação:"📚", Moradia:"🏠",
+  Roupas:"👕", Gasolina:"⛽", "Consertos Automovéis":"🔧", "Cartão de Crédito":"💳",
+};
 
 function maskBRL(v: string) {
   const digits = v.replace(/\D/g, "");
   if (!digits) return "";
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(parseInt(digits) / 100);
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseInt(digits) / 100);
 }
 function parseBRL(v: string) {
   return parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
@@ -35,9 +30,7 @@ function parseBRL(v: string) {
 function AddForm() {
   const params = useSearchParams();
   const router = useRouter();
-  const [type, setType] = useState<"income" | "expense">(
-    (params.get("type") as any) || "expense",
-  );
+  const [type, setType] = useState<"income" | "expense">((params.get("type") as any) || "expense");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -52,6 +45,8 @@ function AddForm() {
     });
   }, []);
 
+  const isCredit = category === "Cartão de Crédito";
+
   async function handleSave() {
     if (!description || !amount || !category) {
       setError("Preencha todos os campos.");
@@ -59,9 +54,7 @@ function AddForm() {
     }
     setLoading(true);
     setError("");
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from("transactions").insert({
       user_id: user?.id,
       type,
@@ -69,6 +62,7 @@ function AddForm() {
       category,
       amount: parseBRL(amount),
       date,
+      is_credit: isCredit,
     });
     if (error) {
       setError(error.message);
@@ -84,10 +78,7 @@ function AddForm() {
     <DashboardWrapper>
       <div className="space-y-5">
         <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="w-10 h-10 bg-brand-muted rounded-xl flex items-center justify-center"
-          >
+          <Link href="/" className="w-10 h-10 bg-brand-muted rounded-xl flex items-center justify-center">
             <ArrowLeft size={18} />
           </Link>
           <h1 className="text-xl font-bold">Nova transação</h1>
@@ -97,14 +88,11 @@ function AddForm() {
           {(["income", "expense"] as const).map((t) => (
             <button
               key={t}
-              onClick={() => {
-                setType(t);
-                setCategory("");
-              }}
+              onClick={() => { setType(t); setCategory(""); }}
               className={`flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all
                 ${type === t ? (t === "income" ? "bg-brand-green text-brand-dark" : "bg-brand-orange text-white") : "text-gray-400"}`}
             >
-              {t === "income" ? "Entrada" : "Saída"}
+              {t === "income" ? "↑ Entrada" : "↓ Saída"}
             </button>
           ))}
         </div>
@@ -138,14 +126,31 @@ function AddForm() {
                 <button
                   key={cat}
                   onClick={() => setCategory(cat)}
-                  className={`px-3 py-2 rounded-xl text-xs font-medium transition-all
-                    ${category === cat ? (type === "income" ? "bg-brand-green text-brand-dark" : "bg-brand-orange text-white") : "bg-brand-muted text-gray-400 border border-brand-border"}`}
+                  className={`px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5
+                    ${category === cat
+                      ? cat === "Cartão de Crédito"
+                        ? "bg-blue-500 text-white"
+                        : type === "income"
+                          ? "bg-brand-green text-brand-dark"
+                          : "bg-brand-orange text-white"
+                      : "bg-brand-muted text-gray-400 border border-brand-border"}`}
                 >
+                  {CAT_EMOJI[cat] && <span>{CAT_EMOJI[cat]}</span>}
                   {cat}
                 </button>
               ))}
             </div>
           </div>
+
+          {isCredit && (
+            <div className="rounded-xl p-3 bg-blue-500/10 border border-blue-500/20">
+              <p className="text-blue-300 text-xs font-semibold mb-1">💳 Modo Cartão de Crédito</p>
+              <p className="text-gray-400 text-xs leading-relaxed">
+                Este gasto <strong className="text-white">não desconta do saldo agora</strong>. Fica registrado como fatura pendente até você pagar a fatura do cartão.
+              </p>
+            </div>
+          )}
+
           <div>
             <p className="text-gray-400 text-xs mb-1 ml-1">Data</p>
             <input
@@ -159,11 +164,11 @@ function AddForm() {
 
         {error && <p className="text-red-400 text-sm">{error}</p>}
         <button
-          className="btn-primary w-full"
+          className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed ${isCredit ? "bg-blue-500 text-white" : type === "income" ? "bg-brand-green text-brand-dark" : "bg-brand-orange text-white"}`}
           onClick={handleSave}
           disabled={loading}
         >
-          {loading ? "Salvando..." : "Salvar transação"}
+          {loading ? "Salvando..." : isCredit ? "💳 Registrar no Cartão" : type === "income" ? "✓ Salvar Entrada" : "✓ Salvar Saída"}
         </button>
       </div>
     </DashboardWrapper>
@@ -172,15 +177,13 @@ function AddForm() {
 
 export default function AdicionarPage() {
   return (
-    <Suspense
-      fallback={
-        <DashboardWrapper>
-          <div className="flex items-center justify-center h-64">
-            <div className="w-8 h-8 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
-          </div>
-        </DashboardWrapper>
-      }
-    >
+    <Suspense fallback={
+      <DashboardWrapper>
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardWrapper>
+    }>
       <AddForm />
     </Suspense>
   );

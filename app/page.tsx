@@ -6,7 +6,7 @@ import { ChevronRight, TrendingUp, TrendingDown, Bell } from "lucide-react";
 import Link from "next/link";
 import DashboardWrapper from "@/components/DashboardWrapper";
 
-type Transaction = { id: string; type: "income"|"expense"; category: string; description: string; amount: number; date: string; };
+type Transaction = { id: string; type: "income"|"expense"; category: string; description: string; amount: number; date: string; is_credit?: boolean; };
 type Bill = { id: string; name: string; amount: number; due_day: number; icon: string; };
 type Payment = { bill_id: string; paid: boolean; month: number; year: number; };
 
@@ -55,7 +55,8 @@ export default function HomePage() {
 
   const income = transactions.filter(t => t.type==="income").reduce((s,t) => s+t.amount, 0);
   const expense = transactions.filter(t => t.type==="expense").reduce((s,t) => s+t.amount, 0);
-  const balance = income - expense;
+  const ccExpense = transactions.filter(t => t.type==="expense" && t.is_credit).reduce((s,t) => s+t.amount, 0);
+  const balance = income - (expense - ccExpense);
   const name = user?.user_metadata?.name?.split(" ")[0] || "Você";
 
   const unpaidBills = bills.filter(b => !payments.find(p => p.bill_id===b.id && p.paid));
@@ -67,7 +68,7 @@ export default function HomePage() {
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
   const monthIncome = monthTx.filter(t => t.type==="income").reduce((s,t) => s+t.amount, 0);
-  const monthExpense = monthTx.filter(t => t.type==="expense").reduce((s,t) => s+t.amount, 0);
+  const monthExpense = monthTx.filter(t => t.type==="expense" && !t.is_credit).reduce((s,t) => s+t.amount, 0);
   const monthResult = monthIncome - monthExpense;
   const expPct = monthIncome > 0 ? Math.min((monthExpense / monthIncome) * 100, 100) : monthExpense > 0 ? 100 : 0;
   const isGreen = monthResult >= 0;

@@ -11,6 +11,7 @@ create table if not exists public.transactions (
   description text not null,
   amount numeric(12, 2) not null,
   date date not null default current_date,
+  is_credit boolean default false,  -- true = gasto no cartão, não desconta saldo imediatamente
   created_at timestamptz default now()
 );
 
@@ -46,9 +47,10 @@ create table if not exists public.goals (
   user_id uuid references auth.users(id) on delete cascade not null,
   name text not null,
   icon text default '🎯',
-  target_amount numeric(12, 2) not null,
+  target_amount numeric(12, 2) not null default 0,
   saved_amount numeric(12, 2) default 0,
   color text default '#00C896',
+  goal_type text default 'goal',  -- 'goal' = meta com valor alvo | 'investment' = aplicação livre (🤑)
   created_at timestamptz default now()
 );
 
