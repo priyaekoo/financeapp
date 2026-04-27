@@ -2,15 +2,16 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, Check, Trash2, ChevronLeft, ChevronRight, AlertTriangle, Pencil, CreditCard } from "lucide-react";
+import { Plus, Check, Trash2, ChevronLeft, ChevronRight, AlertTriangle, Pencil } from "lucide-react";
 import DashboardWrapper from "@/components/DashboardWrapper";
+import InstallmentsSection from "@/components/InstallmentsSection";
 
-// Semanas qui→qua (mesma lógica do relatórios)
+// Semanas qui→qua
 function getMonthWeeks(year: number, month: number) {
   const firstDay = new Date(year, month - 1, 1);
   const lastDay  = new Date(year, month, 0);
-  const dow = firstDay.getDay(); // 0=Dom … 6=Sáb
-  const offset = (dow - 4 + 7) % 7; // dias para voltar até a quinta anterior
+  const dow = firstDay.getDay();
+  const offset = (dow - 4 + 7) % 7;
   const thu = new Date(firstDay);
   thu.setDate(thu.getDate() - offset);
   const weeks: { start: Date; end: Date }[] = [];
@@ -35,7 +36,6 @@ type Payment = { id: string; bill_id: string; paid: boolean; month: number; year
 type BillWithStatus = Bill & { isPaid: boolean; isOverdue: boolean; isToday: boolean; payment: Payment | undefined; };
 type ConfirmState = { bill: BillWithStatus; action: "pay" | "unpay" | "delete" } | null;
 type Income = { amount: number; date: string; };
-type Installment = { id: string; card_name: string; purchase_name: string; total_amount: number; installment_count: number; start_month: number; start_year: number; };
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
 function maskBRL(v: string) {
@@ -48,12 +48,6 @@ function parseBRL(v: string) {
 }
 const ICONS = ["💡","📶","🏠","💧","📺","🚗","📱","🎓","💪","🛒","🐶","❤️"];
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-
-function calcInst(inst: Installment, today: Date) {
-  const monthsElapsed = (today.getFullYear() - inst.start_year) * 12 + (today.getMonth() - (inst.start_month - 1));
-  const paid = Math.max(0, Math.min(monthsElapsed + 1, inst.installment_count));
-  return { paid, remaining: inst.installment_count - paid };
-}
 
 export default function ContasPage() {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -79,19 +73,6 @@ export default function ContasPage() {
   const [editAmount, setEditAmount] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
-  // parcelamentos
-  const [installments, setInstallments] = useState<Installment[]>([]);
-  const [showInstallments, setShowInstallments] = useState(false);
-  const [showInstallForm, setShowInstallForm] = useState(false);
-  const [instCardName, setInstCardName] = useState("");
-  const [instPurchaseName, setInstPurchaseName] = useState("");
-  const [instTotalAmount, setInstTotalAmount] = useState("");
-  const [instCount, setInstCount] = useState("12");
-  const [instStartMonth, setInstStartMonth] = useState(new Date().getMonth() + 1);
-  const [instStartYear, setInstStartYear] = useState(new Date().getFullYear());
-  const [instSaving, setInstSaving] = useState(false);
-  const [deleteInstConfirm, setDeleteInstConfirm] = useState<Installment | null>(null);
-
   const supabase = createClient();
   const router = useRouter();
 
@@ -99,17 +80,15 @@ export default function ContasPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.replace("/login"); return; }
     const mm = String(month).padStart(2, "0");
-    const [billRes, payRes, txRes, instRes] = await Promise.all([
+    const [billRes, payRes, txRes] = await Promise.all([
       supabase.from("bills").select("*").eq("user_id", user.id).eq("active", true).order("due_day"),
       supabase.from("bill_payments").select("*").eq("user_id", user.id).eq("month", month).eq("year", year),
       supabase.from("transactions").select("amount,date").eq("user_id", user.id).eq("type", "income")
         .gte("date", `${year}-${mm}-01`).lte("date", `${year}-${mm}-31`),
-      supabase.from("installments").select("*").eq("user_id", user.id).order("created_at"),
     ]);
     setBills(billRes.data || []);
     setPayments(payRes.data || []);
     setIncomes(txRes.data || []);
-    setInstallments(instRes.data || []);
     setLoading(false);
   }
 
@@ -188,34 +167,6 @@ export default function ContasPage() {
     setConfirm(null);
   }
 
-  async function addInstallment() {
-    if (!instCardName || !instPurchaseName || !instTotalAmount || !instCount) return;
-    setInstSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase.from("installments").insert({
-      user_id: user?.id,
-      card_name: instCardName,
-      purchase_name: instPurchaseName,
-      total_amount: parseBRL(instTotalAmount),
-      installment_count: parseInt(instCount),
-      start_month: instStartMonth,
-      start_year: instStartYear,
-    }).select().single();
-    if (!error && data) {
-      setInstallments(prev => [...prev, data]);
-      setInstCardName(""); setInstPurchaseName(""); setInstTotalAmount(""); setInstCount("12");
-      setInstStartMonth(new Date().getMonth() + 1); setInstStartYear(new Date().getFullYear());
-      setShowInstallForm(false);
-    }
-    setInstSaving(false);
-  }
-
-  async function deleteInstallment(id: string) {
-    await supabase.from("installments").delete().eq("id", id);
-    setInstallments(prev => prev.filter(i => i.id !== id));
-    setDeleteInstConfirm(null);
-  }
-
   function getConfirmContent() {
     if (!confirm) return null;
     const { bill, action } = confirm;
@@ -283,13 +234,6 @@ export default function ContasPage() {
   const todayDate = new Date(realNow.getFullYear(), realNow.getMonth(), realNow.getDate());
   const currentWeekIdx = isCurrentMonth ? weekRanges.findIndex(wr => todayDate >= wr.start && todayDate <= wr.end) : -1;
 
-  const now = new Date();
-  const activeInstallments = installments.filter(i => calcInst(i, now).remaining > 0);
-  const totalInstMonthly = activeInstallments.reduce((s, i) => s + i.total_amount / i.installment_count, 0);
-  const instTotalParsed = parseBRL(instTotalAmount);
-  const instCountNum = parseInt(instCount) || 0;
-  const instMonthly = instCountNum > 0 ? instTotalParsed / instCountNum : 0;
-
   return (
     <DashboardWrapper>
       {loading ? (
@@ -316,7 +260,6 @@ export default function ContasPage() {
             </div>
           </div>
 
-          {/* Resumo semana */}
           <div className="card space-y-2.5">
             <p className="text-white font-semibold text-sm">Resumo</p>
             <div className="flex justify-between text-sm">
@@ -348,7 +291,6 @@ export default function ContasPage() {
             )}
           </div>
 
-          {/* Lista da semana com botão de pagar */}
           <div>
             <p className="text-gray-400 text-xs font-semibold mb-2 ml-1">Contas da semana</p>
             {weekBills.length === 0 ? (
@@ -391,7 +333,7 @@ export default function ContasPage() {
       ) : (
         /* ── TELA PRINCIPAL ── */
         <div className="space-y-4">
-          {/* Header — navegação de mês sem limite */}
+          {/* Header */}
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold">Contas</h1>
             <div className="flex items-center gap-2">
@@ -414,14 +356,13 @@ export default function ContasPage() {
             <div className="card p-3"><p className="text-gray-400 text-[10px] mb-1">Pendente</p><p className="text-brand-orange font-bold text-sm">{fmt(totalPending)}</p></div>
           </div>
 
-          {/* Ver por semana — semanas qui→qua dinâmicas */}
+          {/* Ver por semana */}
           {bills.length > 0 && (
             <div>
               <p className="text-gray-400 text-xs font-semibold mb-2 ml-1">Ver por semana</p>
               <div className="grid grid-cols-2 gap-2">
                 {weekRanges.map((wr, i) => {
                   const wBills = getBillsForWeek(wr);
-                  const wPaid = wBills.filter(b => b.isPaid).reduce((s,b) => s+b.amount, 0);
                   const wTotal = wBills.reduce((s,b) => s+b.amount, 0);
                   const isCurrent = i === currentWeekIdx;
                   return (
@@ -460,7 +401,7 @@ export default function ContasPage() {
             </div>
           )}
 
-          {/* Contas cadastradas (colapsável) + botão adicionar */}
+          {/* Contas cadastradas */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <button onClick={() => setShowAllBills(v => !v)} className="flex items-center gap-2 active:opacity-70 transition-opacity">
@@ -476,7 +417,6 @@ export default function ContasPage() {
 
             {showAllBills && (
               <div className="space-y-3">
-                {/* Formulário nova conta */}
                 {showForm && (
                   <div className="card space-y-3 border-brand-green/20">
                     <p className="text-white font-semibold text-sm">Nova conta fixa</p>
@@ -504,7 +444,6 @@ export default function ContasPage() {
                   </div>
                 )}
 
-                {/* Filtros */}
                 <div className="flex gap-1.5">
                   {(["all","pending","paid"] as const).map(f => (
                     <button key={f} onClick={() => setFilter(f)}
@@ -514,7 +453,6 @@ export default function ContasPage() {
                   ))}
                 </div>
 
-                {/* Lista */}
                 {filtered.length === 0 ? (
                   <div className="card text-center py-8">
                     <p className="text-gray-500 text-sm">{bills.length===0?"Nenhuma conta cadastrada.":"Nenhuma conta nesse filtro."}</p>
@@ -536,19 +474,16 @@ export default function ContasPage() {
                         <p className={`font-bold text-sm shrink-0 ${bill.isPaid?"text-gray-400":bill.isOverdue?"text-red-400":bill.isToday?"text-yellow-400":"text-white"}`}>
                           {fmt(bill.amount)}
                         </p>
-                        {/* Botão editar */}
                         <button
                           onClick={() => { setEditBill(bill); setEditName(bill.name); setEditAmount(new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(bill.amount)); }}
                           className="w-8 h-8 bg-brand-muted rounded-lg flex items-center justify-center shrink-0">
                           <Pencil size={13} className="text-gray-400"/>
                         </button>
-                        {/* Botão pagar */}
                         <button
                           onClick={() => setConfirm({ bill, action: bill.isPaid ? "unpay" : "pay" })}
                           className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${bill.isPaid?"bg-brand-green/20":bill.isOverdue?"bg-red-500/10 border border-red-500/30":bill.isToday?"bg-yellow-500/10 border border-yellow-500/30":"bg-brand-muted border border-brand-border"}`}>
                           {bill.isPaid ? <Check size={16} className="text-brand-green"/> : bill.isOverdue ? <AlertTriangle size={14} className="text-red-400"/> : bill.isToday ? <AlertTriangle size={14} className="text-yellow-400"/> : <div className="w-3 h-3 rounded-full border-2 border-gray-600"/>}
                         </button>
-                        {/* Botão remover */}
                         <button onClick={() => setConfirm({ bill, action: "delete" })} className="w-8 h-8 bg-red-500/10 rounded-lg flex items-center justify-center">
                           <Trash2 size={13} className="text-red-400"/>
                         </button>
@@ -560,116 +495,8 @@ export default function ContasPage() {
             )}
           </div>
 
-          {/* ── Parcelamentos ── */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <button onClick={() => setShowInstallments(v => !v)} className="flex items-center gap-2 active:opacity-70 transition-opacity">
-                <CreditCard size={15} className="text-gray-400"/>
-                <span className="text-white font-semibold text-sm">Parcelamentos</span>
-                <ChevronRight size={15} className={`text-gray-400 transition-transform duration-200 ${showInstallments ? "rotate-90" : ""}`}/>
-                {installments.length > 0 && <span className="text-xs text-gray-500">({installments.length})</span>}
-              </button>
-              <button onClick={() => { setShowInstallments(true); setShowInstallForm(true); }}
-                className="w-9 h-9 bg-brand-muted border border-brand-border rounded-xl flex items-center justify-center shrink-0">
-                <Plus size={18} className="text-gray-400" strokeWidth={2.5}/>
-              </button>
-            </div>
-
-            {showInstallments && (
-              <div className="space-y-3">
-                {/* Resumo mensal de parcelas */}
-                {activeInstallments.length > 0 && (
-                  <div className="card p-3">
-                    <p className="text-gray-400 text-[10px] mb-1">Total mensal em parcelas ativas</p>
-                    <p className="text-brand-orange font-bold text-base">{fmt(totalInstMonthly)}</p>
-                  </div>
-                )}
-
-                {/* Formulário novo parcelamento */}
-                {showInstallForm && (
-                  <div className="card space-y-3 border-brand-orange/20">
-                    <p className="text-white font-semibold text-sm">Novo parcelamento</p>
-                    <input className="input-field" placeholder="Cartão (ex: Nubank, Itaú)" value={instCardName} onChange={e => setInstCardName(e.target.value)}/>
-                    <input className="input-field" placeholder="O que foi comprado (ex: TV Samsung)" value={instPurchaseName} onChange={e => setInstPurchaseName(e.target.value)}/>
-                    <input className="input-field" type="text" inputMode="numeric" placeholder="Valor total (ex: 1.200,00)" value={instTotalAmount} onChange={e => setInstTotalAmount(maskBRL(e.target.value))}/>
-                    <div>
-                      <p className="text-gray-400 text-xs mb-1 ml-1">Número de parcelas</p>
-                      <input className="input-field" type="number" min="1" max="120" placeholder="Ex: 12" value={instCount} onChange={e => setInstCount(e.target.value)}/>
-                    </div>
-                    {instMonthly > 0 && (
-                      <div className="bg-brand-muted rounded-xl px-3 py-2.5">
-                        <p className="text-gray-400 text-xs">Valor por parcela: <span className="text-brand-orange font-bold text-sm">{fmt(instMonthly)}/mês</span></p>
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-gray-400 text-xs mb-1 ml-1">Mês da 1ª parcela</p>
-                      <div className="flex gap-2">
-                        <select className="input-field flex-1" value={instStartMonth} onChange={e => setInstStartMonth(parseInt(e.target.value))}>
-                          {MONTHS_PT.map((m, i) => <option key={i} value={i+1} className="bg-brand-card">{m}</option>)}
-                        </select>
-                        <input className="input-field w-24" type="number" min="2020" max="2040" value={instStartYear} onChange={e => setInstStartYear(parseInt(e.target.value))}/>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button className="btn-secondary flex-1 text-sm" onClick={() => setShowInstallForm(false)}>Cancelar</button>
-                      <button className="btn-primary flex-1 text-sm" onClick={addInstallment} disabled={instSaving}>{instSaving?"...":"Salvar"}</button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Lista de parcelamentos */}
-                {installments.length === 0 ? (
-                  <div className="card text-center py-8">
-                    <p className="text-gray-500 text-sm">Nenhum parcelamento cadastrado.</p>
-                    <button onClick={() => setShowInstallForm(true)} className="text-brand-green text-sm mt-1 inline-block">Adicionar primeiro →</button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {installments.map(inst => {
-                      const { paid, remaining } = calcInst(inst, now);
-                      const done = remaining <= 0;
-                      const monthly = inst.total_amount / inst.installment_count;
-                      const instPct = Math.round((paid / inst.installment_count) * 100);
-                      return (
-                        <div key={inst.id} className={`card transition-all ${done ? "opacity-60" : ""}`}>
-                          <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-brand-muted flex items-center justify-center shrink-0">
-                              <CreditCard size={18} className={done ? "text-gray-500" : "text-brand-orange"}/>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="text-white font-semibold text-sm truncate">{inst.purchase_name}</p>
-                                  <p className="text-gray-400 text-xs">{inst.card_name}</p>
-                                </div>
-                                <button onClick={() => setDeleteInstConfirm(inst)} className="w-7 h-7 bg-red-500/10 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                                  <Trash2 size={12} className="text-red-400"/>
-                                </button>
-                              </div>
-                              <div className="mt-2 space-y-1.5">
-                                <div className="flex justify-between text-xs">
-                                  <span className="text-gray-400">
-                                    {done ? "Quitado ✓" : `Restam ${remaining} de ${inst.installment_count}`}
-                                  </span>
-                                  <span className={done ? "text-brand-green font-semibold" : "text-brand-orange font-semibold"}>
-                                    {done ? fmt(inst.total_amount) : `${fmt(monthly)}/mês`}
-                                  </span>
-                                </div>
-                                <div className="h-1.5 bg-brand-muted rounded-full overflow-hidden">
-                                  <div className={`h-full rounded-full transition-all duration-500 ${done ? "bg-brand-green" : "bg-brand-orange"}`} style={{ width:`${instPct}%` }}/>
-                                </div>
-                                <p className="text-gray-600 text-[10px]">{paid}/{inst.installment_count} parcelas · Total: {fmt(inst.total_amount)}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {/* Parcelamentos */}
+          <InstallmentsSection />
         </div>
       )}
 
@@ -725,33 +552,6 @@ export default function ContasPage() {
               <button onClick={updateBill} disabled={editSaving || !editName || !editAmount}
                 className="flex-1 py-3.5 rounded-xl font-semibold text-sm bg-brand-green text-brand-dark transition-all active:scale-95 disabled:opacity-50">
                 {editSaving ? "Salvando..." : "Salvar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de exclusão de parcelamento */}
-      {deleteInstConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-end" onClick={() => setDeleteInstConfirm(null)}>
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"/>
-          <div className="relative w-full max-w-md mx-auto bg-[#111827] border-t border-brand-border rounded-t-3xl px-6 pt-5 pb-10 space-y-4"
-            onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-brand-border rounded-full mx-auto"/>
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">🗑️</span>
-              <div>
-                <p className="text-white font-bold text-base">Remover parcelamento?</p>
-                <p className="text-gray-400 text-sm mt-1 leading-relaxed">"{deleteInstConfirm.purchase_name}" será removido do acompanhamento.</p>
-              </div>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button className="flex-1 py-3.5 rounded-xl font-semibold text-sm bg-brand-muted text-gray-300 border border-brand-border active:scale-95 transition-all" onClick={() => setDeleteInstConfirm(null)}>
-                Cancelar
-              </button>
-              <button onClick={() => deleteInstallment(deleteInstConfirm.id)}
-                className="flex-1 py-3.5 rounded-xl font-semibold text-sm bg-red-500 text-white transition-all active:scale-95">
-                Remover
               </button>
             </div>
           </div>
