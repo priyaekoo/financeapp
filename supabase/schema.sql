@@ -54,13 +54,28 @@ create table if not exists public.goals (
   created_at timestamptz default now()
 );
 
+-- Parcelamentos (acompanhamento de compras parceladas no cartão)
+create table if not exists public.installments (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  card_name text not null,
+  purchase_name text not null,
+  total_amount numeric(12, 2) not null,
+  installment_count integer not null,
+  start_month integer not null,
+  start_year integer not null,
+  created_at timestamptz default now()
+);
+
 -- RLS
 alter table public.transactions enable row level security;
 alter table public.bills enable row level security;
 alter table public.bill_payments enable row level security;
 alter table public.goals enable row level security;
+alter table public.installments enable row level security;
 
 create policy "own transactions" on public.transactions for all using (auth.uid() = user_id);
 create policy "own bills" on public.bills for all using (auth.uid() = user_id);
 create policy "own bill_payments" on public.bill_payments for all using (auth.uid() = user_id);
 create policy "own goals" on public.goals for all using (auth.uid() = user_id);
+create policy "own installments" on public.installments for all using (auth.uid() = user_id);
