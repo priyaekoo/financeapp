@@ -3,20 +3,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import DashboardWrapper from "@/components/DashboardWrapper";
 
 type Transaction = { id: string; type: "income"|"expense"; category: string; description: string; amount: number; date: string; is_credit?: boolean; };
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(v);
 const MONTHS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-const CAT_EMOJI: Record<string, string> = {
-  Alimentação:"🍔", Transporte:"🚗", Saúde:"💊", Lazer:"🎮", Educação:"📚",
-  Moradia:"🏠", Roupas:"👕", Outros:"💰", Contas:"🧾", Trabalho:"💼",
-  Freelance:"💻", Investimento:"📈", "Cartão de Crédito":"💳", Gasolina:"⛽",
-  "Consertos Automovéis":"🔧",
-};
-
 // Gera semanas qui→qua para o mês informado
 function getMonthWeeks(year: number, month: number) {
   const firstDay = new Date(year, month - 1, 1);
@@ -50,8 +43,6 @@ export default function RelatoriosPage() {
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
   const [filterYear, setFilterYear]   = useState(new Date().getFullYear());
   const [filterWeek, setFilterWeek]   = useState(0);
-  const [deleteConfirm, setDeleteConfirm] = useState<Transaction | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const supabase = createClient();
   const router   = useRouter();
 
@@ -65,16 +56,6 @@ export default function RelatoriosPage() {
     }
     load();
   }, []);
-
-  async function confirmDelete() {
-    if (!deleteConfirm) return;
-    setDeleting(true);
-    await supabase.from("bill_payments").update({ paid: false, paid_at: null, transaction_id: null }).eq("transaction_id", deleteConfirm.id);
-    await supabase.from("transactions").delete().eq("id", deleteConfirm.id);
-    setTransactions(prev => prev.filter(t => t.id !== deleteConfirm.id));
-    setDeleteConfirm(null);
-    setDeleting(false);
-  }
 
   // ── Navegação mensal ──
   function prevMonth() {
@@ -95,24 +76,6 @@ export default function RelatoriosPage() {
   const weekRanges = getMonthWeeks(filterYear, filterMonth);
   const safeWeek   = Math.min(filterWeek, weekRanges.length - 1);
   const weekRange  = weekRanges[safeWeek];
-
-  // ── Dados filtrados ──
-  const filtered = transactions.filter(t => {
-    const d = new Date(t.date + "T00:00:00");
-    if (viewMode === "monthly") {
-      return d.getMonth() + 1 === filterMonth && d.getFullYear() === filterYear;
-    }
-    return weekRange ? d >= weekRange.start && d <= weekRange.end : false;
-  });
-
-  const totalInc = filtered.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExp = filtered.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-  const totalCC  = filtered.filter(t => t.type === "expense" && t.is_credit).reduce((s, t) => s + t.amount, 0);
-
-  const byCategory = filtered.filter(t => t.type === "expense").reduce((acc, tx) => {
-    acc[tx.category] = (acc[tx.category] || 0) + tx.amount; return acc;
-  }, {} as Record<string, number>);
-  const catData = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   // ── Gráfico mensal (últimos 6 meses) ──
   const byMonth = transactions.reduce((acc, tx) => {
@@ -160,60 +123,21 @@ export default function RelatoriosPage() {
             </div>
           </div>
 
-          {/* Gráfico */}
-          <div className="card">
-            <p className="text-gray-400 text-xs mb-4 font-semibold">{chartTitle}</p>
-            {chartData.length === 0 ? (
-              <p className="text-gray-500 text-sm text-center py-6">Sem dados ainda.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={chartData} barGap={4} barSize={12}>
-                  <XAxis dataKey="label" tick={{ fill:"#6B7280", fontSize:10 }} axisLine={false} tickLine={false}/>
-                  <YAxis hide/>
-                  <Tooltip contentStyle={{ background:"#111827", border:"1px solid #2D3748", borderRadius:12 }} labelStyle={{ color:"#fff" }} formatter={(v: number) => fmt(v)}/>
-                  <Bar dataKey="income" fill="#00C896" radius={[6,6,0,0]} name="Entrada"/>
-                  <Bar dataKey="expense" fill="#FF6B35" radius={[6,6,0,0]} name="Saída"/>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          {/* Navegação — mensal ou semanal */}
-          {viewMode === "monthly" ? (
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-white text-sm">Detalhes do mês</h2>
-              <div className="flex items-center gap-2">
+          {/* Navegação de mês (modo semanal) */}
+          {viewMode === "weekly" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-center gap-2">
                 <button onClick={prevMonth} className="w-8 h-8 bg-brand-muted rounded-lg flex items-center justify-center">
                   <ChevronLeft size={16} className="text-gray-400"/>
                 </button>
                 <span className="text-white font-semibold text-sm min-w-[110px] text-center">
-                  {MONTHS_PT[filterMonth-1].slice(0,3)} {filterYear}
+                  {MONTHS_PT[filterMonth-1]} {filterYear}
                 </span>
                 <button onClick={nextMonth} disabled={isCurrentMonth}
                   className="w-8 h-8 bg-brand-muted rounded-lg flex items-center justify-center disabled:opacity-30">
                   <ChevronRight size={16} className="text-gray-400"/>
                 </button>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {/* Mês de referência */}
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold text-white text-sm">Detalhes da semana</h2>
-                <div className="flex items-center gap-2">
-                  <button onClick={prevMonth} className="w-8 h-8 bg-brand-muted rounded-lg flex items-center justify-center">
-                    <ChevronLeft size={16} className="text-gray-400"/>
-                  </button>
-                  <span className="text-white font-semibold text-sm min-w-[80px] text-center">
-                    {MONTHS_PT[filterMonth-1].slice(0,3)} {filterYear}
-                  </span>
-                  <button onClick={nextMonth} disabled={isCurrentMonth}
-                    className="w-8 h-8 bg-brand-muted rounded-lg flex items-center justify-center disabled:opacity-30">
-                    <ChevronRight size={16} className="text-gray-400"/>
-                  </button>
-                </div>
-              </div>
-              {/* Tabs de semana */}
               <div className="flex gap-2">
                 {weekRanges.map((wr, i) => (
                   <button key={i} onClick={() => setFilterWeek(i)}
@@ -230,103 +154,28 @@ export default function RelatoriosPage() {
             </div>
           )}
 
-          {/* Totais */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="card"><p className="text-gray-400 text-xs mb-1">Entradas</p><p className="text-brand-green font-bold">{fmt(totalInc)}</p></div>
-            <div className="card">
-              <p className="text-gray-400 text-xs mb-1">Saídas</p>
-              <p className="text-brand-orange font-bold">{fmt(totalExp)}</p>
-              {totalCC > 0 && <p className="text-blue-400 text-[10px] mt-0.5">💳 {fmt(totalCC)} no crédito</p>}
-            </div>
-          </div>
-
-          {/* Categorias */}
-          {catData.length > 0 && (
-            <div className="card space-y-3">
-              <p className="text-white font-bold text-sm">No que mais gastou</p>
-              {catData.map(([cat, val]) => {
-                const pct = totalExp > 0 ? (val / totalExp) * 100 : 0;
-                return (
-                  <div key={cat} className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-brand-muted rounded-xl flex items-center justify-center text-base shrink-0">
-                      {CAT_EMOJI[cat] || "💰"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-white font-medium">{cat}</span>
-                        <span className="text-brand-orange font-semibold">{fmt(val)}</span>
-                      </div>
-                      <div className="h-1.5 bg-brand-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-brand-orange rounded-full transition-all duration-500" style={{ width:`${pct}%` }}/>
-                      </div>
-                      <p className="text-gray-600 text-[10px] mt-0.5">{Math.round(pct)}% das saídas</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Lista de transações */}
-          <div className="space-y-2">
-            <h2 className="font-bold text-white text-sm">Transações</h2>
-            {filtered.length === 0 ? (
-              <div className="card text-center py-8">
-                <p className="text-gray-500 text-sm">
-                  {viewMode === "monthly" ? "Nenhuma transação neste mês." : "Nenhuma transação nesta semana."}
-                </p>
-              </div>
+          {/* Gráfico */}
+          <div className="card">
+            <p className="text-gray-400 text-xs mb-4 font-semibold">{chartTitle}</p>
+            {chartData.length === 0 ? (
+              <p className="text-gray-500 text-sm text-center py-6">Sem dados ainda.</p>
             ) : (
-              filtered.map(tx => (
-                <div key={tx.id} className="card flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 ${tx.is_credit ? "bg-blue-500/10" : "bg-brand-muted"}`}>
-                    {CAT_EMOJI[tx.category] || "💰"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-white text-sm truncate">{tx.description}</p>
-                    <p className="text-gray-400 text-xs">{tx.category} · {new Date(tx.date+"T00:00:00").toLocaleDateString("pt-BR")}{tx.is_credit ? " · 💳" : ""}</p>
-                  </div>
-                  <p className={`font-bold text-sm shrink-0 ${tx.type==="income" ? "text-brand-green" : tx.is_credit ? "text-blue-400" : "text-brand-orange"}`}>
-                    {tx.type==="income" ? "+" : "-"}{fmt(tx.amount)}
-                  </p>
-                  <button onClick={() => setDeleteConfirm(tx)}
-                    className="w-8 h-8 bg-red-500/10 rounded-lg flex items-center justify-center shrink-0">
-                    <Trash2 size={13} className="text-red-400"/>
-                  </button>
-                </div>
-              ))
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={chartData} barGap={4} barSize={14}>
+                  <XAxis dataKey="label" tick={{ fill:"#6B7280", fontSize:10 }} axisLine={false} tickLine={false}/>
+                  <YAxis hide/>
+                  <Tooltip contentStyle={{ background:"#111827", border:"1px solid #2D3748", borderRadius:12 }} labelStyle={{ color:"#fff" }} formatter={(v: number) => fmt(v)}/>
+                  <Bar dataKey="income" fill="#00C896" radius={[6,6,0,0]} name="Entrada"/>
+                  <Bar dataKey="expense" fill="#FF6B35" radius={[6,6,0,0]} name="Saída"/>
+                </BarChart>
+              </ResponsiveContainer>
             )}
+            <div className="flex justify-center gap-6 mt-3">
+              <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2.5 h-2.5 rounded-full bg-brand-green inline-block"/>Entradas</span>
+              <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2.5 h-2.5 rounded-full bg-brand-orange inline-block"/>Saídas</span>
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* Modal confirmação de exclusão */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-end" onClick={() => setDeleteConfirm(null)}>
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"/>
-          <div className="relative w-full max-w-md mx-auto bg-[#111827] border-t border-brand-border rounded-t-3xl px-6 pt-5 pb-10 space-y-4"
-            onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-brand-border rounded-full mx-auto"/>
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">🗑️</span>
-              <div>
-                <p className="text-white font-bold text-base">Excluir transação?</p>
-                <p className="text-gray-400 text-sm mt-1 leading-relaxed">"{deleteConfirm.description}" · {fmt(deleteConfirm.amount)}</p>
-                <p className="text-gray-500 text-xs mt-1">Esta ação não pode ser desfeita.</p>
-              </div>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                className="flex-1 py-3.5 rounded-xl font-semibold text-sm bg-brand-muted text-gray-300 border border-brand-border active:scale-95 transition-all"
-                onClick={() => setDeleteConfirm(null)}>
-                Cancelar
-              </button>
-              <button onClick={confirmDelete} disabled={deleting}
-                className="flex-1 py-3.5 rounded-xl font-semibold text-sm bg-red-500 text-white active:scale-95 transition-all disabled:opacity-50">
-                {deleting ? "Excluindo..." : "Excluir"}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </DashboardWrapper>

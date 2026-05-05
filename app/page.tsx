@@ -113,8 +113,8 @@ export default function HomePage() {
 
           {/* Resumo */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="card"><p className="text-gray-400 text-xs mb-1">Entradas</p><p className="text-brand-green font-bold text-base">{fmt(income)}</p></div>
-            <div className="card"><p className="text-gray-400 text-xs mb-1">Saídas</p><p className="text-brand-orange font-bold text-base">{fmt(expense)}</p></div>
+            <div className="card"><p className="text-gray-400 text-xs mb-1">Entradas de {monthName}</p><p className="text-brand-green font-bold text-base">{fmt(monthIncome)}</p></div>
+            <div className="card"><p className="text-gray-400 text-xs mb-1">Saídas de {monthName}</p><p className="text-brand-orange font-bold text-base">{fmt(monthExpense)}</p></div>
           </div>
 
           {/* Saúde financeira do mês */}
@@ -159,20 +159,20 @@ export default function HomePage() {
             </Link>
           )}
 
-          {/* Últimas transações */}
+          {/* Últimas transações do mês */}
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-bold text-white text-sm">Últimas movimentações</h2>
-              <Link href="/relatorios" className="text-brand-green text-xs flex items-center gap-1">Ver tudo <ChevronRight size={12} /></Link>
+              <h2 className="font-bold text-white text-sm">Movimentações de {monthName}</h2>
+              <Link href="/relatorios" className="text-brand-green text-xs flex items-center gap-1">Relatórios <ChevronRight size={12} /></Link>
             </div>
-            {transactions.length === 0 ? (
+            {monthTx.length === 0 ? (
               <div className="card text-center py-8">
-                <p className="text-gray-500 text-sm">Nenhuma movimentação ainda.</p>
+                <p className="text-gray-500 text-sm">Nenhuma movimentação este mês.</p>
                 <Link href="/adicionar" className="text-brand-green text-sm mt-1 inline-block">Adicionar primeira →</Link>
               </div>
             ) : (
               <div className="space-y-2">
-                {transactions.slice(0, 5).map(tx => (
+                {monthTx.slice(0, 5).map(tx => (
                   <div key={tx.id} className="card flex items-center gap-3">
                     <div className="w-10 h-10 bg-brand-muted rounded-xl flex items-center justify-center text-lg shrink-0">{emoji[tx.category]||"💳"}</div>
                     <div className="flex-1 min-w-0">
