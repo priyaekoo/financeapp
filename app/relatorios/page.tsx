@@ -103,6 +103,12 @@ export default function RelatoriosPage() {
   const chartData = viewMode === "monthly" ? monthChartData : weekChartData;
   const chartTitle = viewMode === "monthly" ? "Entradas vs Saídas (últimos 6 meses)" : `Entradas vs Saídas — ${MONTHS_PT[filterMonth-1]}`;
 
+  // ── Saldo acumulado ──
+  const totalIncome  = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalExpense = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const totalCC      = transactions.filter(t => t.type === "expense" && t.is_credit).reduce((s, t) => s + t.amount, 0);
+  const balance      = totalIncome - (totalExpense - totalCC);
+
   return (
     <DashboardWrapper>
       {loading ? (
@@ -151,6 +157,26 @@ export default function RelatoriosPage() {
                   {weekRange.start.toLocaleDateString("pt-BR",{day:"numeric",month:"short"})} → {weekRange.end.toLocaleDateString("pt-BR",{day:"numeric",month:"short"})}
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Saldo acumulado */}
+          {balance !== 0 && (
+            <div className={`card border ${balance >= 0 ? "border-brand-green/30" : "border-red-500/30"}`}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-white font-bold text-sm">Saldo acumulado</p>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${balance >= 0 ? "bg-brand-green/10 text-brand-green" : "bg-red-500/10 text-red-400"}`}>
+                  {balance >= 0 ? "● Positivo" : "● Negativo"}
+                </span>
+              </div>
+              <p className="text-gray-400 text-xs mb-2">Total acumulado de todos os meses</p>
+              <p className={`text-2xl font-bold ${balance >= 0 ? "text-brand-green" : "text-red-400"}`}>
+                {balance >= 0 ? "+" : ""}{fmt(balance)}
+              </p>
+              <div className="flex justify-between text-xs pt-2 mt-2 border-t border-brand-border">
+                <span className="text-gray-500">Total entradas <span className="text-brand-green font-semibold">{fmt(totalIncome)}</span></span>
+                <span className="text-gray-500">Total saídas <span className="text-brand-orange font-semibold">{fmt(totalExpense - totalCC)}</span></span>
+              </div>
             </div>
           )}
 

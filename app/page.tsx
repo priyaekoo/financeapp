@@ -53,10 +53,6 @@ export default function HomePage() {
     load();
   }, []);
 
-  const income = transactions.filter(t => t.type==="income").reduce((s,t) => s+t.amount, 0);
-  const expense = transactions.filter(t => t.type==="expense").reduce((s,t) => s+t.amount, 0);
-  const ccExpense = transactions.filter(t => t.type==="expense" && t.is_credit).reduce((s,t) => s+t.amount, 0);
-  const balance = income - (expense - ccExpense);
   const name = user?.user_metadata?.name?.split(" ")[0] || "Você";
 
   const unpaidBills = bills.filter(b => !payments.find(p => p.bill_id===b.id && p.paid));
@@ -116,26 +112,6 @@ export default function HomePage() {
             <div className="card"><p className="text-gray-400 text-xs mb-1">Entradas de {monthName}</p><p className="text-brand-green font-bold text-base">{fmt(monthIncome)}</p></div>
             <div className="card"><p className="text-gray-400 text-xs mb-1">Saídas de {monthName}</p><p className="text-brand-orange font-bold text-base">{fmt(monthExpense)}</p></div>
           </div>
-
-          {/* Saldo acumulado */}
-          {balance !== 0 && (
-            <div className={`card border ${balance >= 0 ? "border-brand-green/30" : "border-red-500/30"}`}>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-white font-bold text-sm">Saldo acumulado</p>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${balance >= 0 ? "bg-brand-green/10 text-brand-green" : "bg-red-500/10 text-red-400"}`}>
-                  {balance >= 0 ? "● Positivo" : "● Negativo"}
-                </span>
-              </div>
-              <p className="text-gray-400 text-xs mb-2">Total acumulado de todos os meses</p>
-              <p className={`text-2xl font-bold ${balance >= 0 ? "text-brand-green" : "text-red-400"}`}>
-                {balance >= 0 ? "+" : ""}{fmt(balance)}
-              </p>
-              <div className="flex justify-between text-xs pt-2 mt-2 border-t border-brand-border">
-                <span className="text-gray-500">Total entradas <span className="text-brand-green font-semibold">{fmt(income)}</span></span>
-                <span className="text-gray-500">Total saídas <span className="text-brand-orange font-semibold">{fmt(expense - ccExpense)}</span></span>
-              </div>
-            </div>
-          )}
 
           {/* Saúde financeira do mês */}
           {(monthIncome > 0 || monthExpense > 0) && (
